@@ -1,0 +1,192 @@
+
+
+        #region VSTA generated code
+        enum ScriptResults
+        {
+            Success = Microsoft.SqlServer.Dts.Runtime.DTSExecResult.Success,
+            Failure = Microsoft.SqlServer.Dts.Runtime.DTSExecResult.Failure
+        };
+        #endregion
+
+        /*
+		The execution engine calls this method when the task executes.
+		To access the object model, use the Dts property. Connections, variables, events,
+		and logging features are available as members of the Dts property as shown in the following examples.
+
+		To reference a variable, call Dts.Variables["MyCaseSensitiveVariableName"].Value;
+		To post a log entry, call Dts.Log("This is my log text", 999, null);
+		To fire an event, call Dts.Events.FireInformation(99, "test", "hit the help message", "", 0, true);
+
+		To use the connections collection use something like the following:
+		ConnectionManager cm = Dts.Connections.Add("OLEDB");
+		cm.ConnectionString = "Data Source=localhost;Initial Catalog=AdventureWorks;Provider=SQLNCLI10;Integrated Security=SSPI;Auto Translate=False;";
+
+		Before returning from this method, set the value of Dts.TaskResult to indicate success or failure.
+		
+		To open Help, press F1.
+	*/
+
+        public void Main()
+        {
+            // TODO: Add your code here
+            string FolderName =Dts.Variables["FtpFolder"].Value.ToString();
+            string DestinationFolder =  Dts.Variables["StageFolder"].Value.ToString()+"\\";
+
+            List<string> filesList= GetFTPFilesList(FolderName);
+            if (filesList.Count > 0)
+            {
+                foreach (var item in filesList)
+                {
+                    DownloadFileFromFTP(item.ToString(), FolderName, DestinationFolder);
+                    /*Method to delete files on server once they are downloaded*/
+                   // DeleteFileOnServer(item.ToString(), FolderName);
+                }
+                
+            }
+            
+            Dts.TaskResult = (int)ScriptResults.Success;
+        }
+
+
+        //public static bool DeleteFileOnServer(string fileName,string FolderName)
+        //{
+        //    bool execStatus = false;
+
+        //    try
+        //    {
+        //        string uri = "ftp://" + "sftp.bisra.com" + "/" + FolderName + "/" + fileName;
+        //        Uri serverUri = new Uri(uri);
+        //        if (serverUri.Scheme != Uri.UriSchemeFtp)
+        //        {
+        //            return execStatus;
+        //        }
+        //        FtpWebRequest request;
+        //        request = (FtpWebRequest)FtpWebRequest.Create(new Uri("ftp://" + "sftp.bisra.com" + "/" + FolderName + "/" + fileName));
+        //        request.Credentials = new NetworkCredential("JSTAR", "L2pLzQl6");
+        //        request.KeepAlive = false;
+        //        request.Method = WebRequestMethods.Ftp.DeleteFile;
+        //        request.UsePassive = true;
+        //        request.EnableSsl = true;
+        //        FtpWebResponse response = (FtpWebResponse)request.GetResponse();
+        //        response.Close();
+        //        execStatus = true;
+        //    }
+        //    catch (Exception wEx)
+        //    {
+        //        //ExceptionLog.Exception(0, "", "", wEx);
+        //    }
+
+        //    return execStatus;
+       // }
+
+        public static List<string> GetFTPFilesList(string FolderName)
+        {
+            List<string> ftpDirItems = new List<string>();
+            List<string> pgpFileList = new List<string>();
+
+            try
+            {
+
+
+                FtpWebRequest reqFTP = (FtpWebRequest)FtpWebRequest.Create(new Uri("ftp://" + "sftp.bisra.com" + "/" + FolderName + "/"));
+                reqFTP.Credentials = new NetworkCredential("JSTAR", "L2pLzQl6");
+                reqFTP.KeepAlive = false;
+                reqFTP.Method = WebRequestMethods.Ftp.ListDirectory;
+                //reqFTP.UseBinary = true;
+                //reqFTP.Proxy = null;
+                reqFTP.UsePassive = true;
+                reqFTP.EnableSsl = true;
+
+
+                string result = string.Empty;
+                using (FtpWebResponse response = (FtpWebResponse)reqFTP.GetResponse())
+                {
+                    using (Stream responseStream = response.GetResponseStream())
+                    {
+                        using (StreamReader sr = new StreamReader(responseStream))
+                        {
+                            result = sr.ReadToEnd();
+                            sr.Close();
+                        }
+                        responseStream.Close();
+                    }
+                    response.Close();
+                }
+
+                if (result != string.Empty)
+                {
+                    result = result.Replace("\r\n", "\r").TrimEnd('\r');
+                    ftpDirItems.AddRange(result.Split('\r'));
+
+                    foreach (string item in ftpDirItems)
+                    {
+                        if (item.Split('.').Length <= 1)
+                        {
+                            if (!Directory.Exists("D:\\TestFolder\\" + FolderName + "\\" + item + "\\"))
+                            {
+                                Directory.CreateDirectory("D:\\TestFolder\\" + FolderName + "\\" + item + "\\");
+                            }
+                        }
+                        pgpFileList.Add(item);
+
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+
+            }
+            return pgpFileList;
+        }
+
+
+        /// <summary>
+        /// To download the file from the FTP
+        /// </summary>
+        /// 
+        public static bool DownloadFileFromFTP(string fileName, string FolderName, string DestinationFolder)
+        {
+            bool execStatus = false;
+
+            try
+            {
+
+                string uri = "ftp://" + "ServerURL" + "/" + FolderName + "/" + fileName;
+                Uri serverUri = new Uri(uri);
+                if (serverUri.Scheme != Uri.UriSchemeFtp)
+                {
+                    return execStatus;
+                }
+                FtpWebRequest reqFTP;
+                reqFTP = (FtpWebRequest)FtpWebRequest.Create(new Uri("ftp://" + "sftp.bisra.com" + "/" + FolderName + "/" + fileName));
+                reqFTP.Credentials = new NetworkCredential("USERNAME", "Pswd");
+                reqFTP.KeepAlive = false;
+                reqFTP.Method = WebRequestMethods.Ftp.DownloadFile;
+                reqFTP.EnableSsl = true;
+                reqFTP.UseBinary = true;
+                reqFTP.Proxy = null;
+                reqFTP.UsePassive = true;
+                FtpWebResponse response = (FtpWebResponse)reqFTP.GetResponse();
+                Stream responseStream = response.GetResponseStream();
+                FileStream writeStream = new FileStream(DestinationFolder+ fileName, FileMode.Create);
+                int Length = 2048;
+                Byte[] buffer = new Byte[Length];
+                int bytesRead = responseStream.Read(buffer, 0, Length);
+                while (bytesRead > 0)
+                {
+                    writeStream.Write(buffer, 0, bytesRead);
+                    bytesRead = responseStream.Read(buffer, 0, Length);
+                }
+                writeStream.Close();
+                response.Close();
+
+                execStatus = true;
+            }
+            catch (Exception wEx)
+            {
+                //ExceptionLog.Exception(0, "", "", wEx);
+            }
+
+            return execStatus;
+        }
+    }
